@@ -121,7 +121,7 @@
                     <!-- 即時動態字幕顯示區 -->
                     <div class="w-full bg-white border border-slate-200 rounded-2xl p-4 mb-6 h-48 overflow-y-auto flex flex-col shadow-inner">
                         <div class="text-xs text-slate-400 mb-2 font-medium flex items-center gap-1 sticky top-0 bg-white/90 backdrop-blur-sm pb-1">
-                            <i data-lucide="message-square-dashed" class="w-3 h-3"></i> 即時語音辨識 (供參考，送出後 AI 會重整)
+                            <i data-lucide="message-square-dashed" class="w-3 h-3"></i> 即時語音辨識預覽 (AI 分析時會自動精準校正)
                         </div>
                         <p id="live-final-text" class="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap"></p>
                         <p id="live-interim-text" class="text-slate-400 text-sm leading-relaxed italic mt-1"></p>
@@ -164,7 +164,7 @@
                <i data-lucide="loader-2" class="w-10 h-10 text-indigo-600 animate-spin relative z-10"></i>
             </div>
             <h3 class="text-xl font-extrabold text-slate-800 mb-2">精靈分析中...</h3>
-            <p id="process-status-text" class="text-slate-500 text-center max-w-sm font-medium">正在深度比對聲紋與整理重點，請稍候...</p>
+            <p id="process-status-text" class="text-slate-500 text-center max-w-sm font-medium">正在深度比對聲紋與精準校對文字，請稍候...</p>
         </div>
 
         <!-- 結果展示區 -->
@@ -202,7 +202,7 @@
                     <div class="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
                         <i data-lucide="message-square-quote" class="w-6 h-6"></i>
                     </div>
-                    <h2 class="text-xl font-extrabold text-slate-800 tracking-tight">智慧逐字稿 (辨識還原)</h2>
+                    <h2 class="text-xl font-extrabold text-slate-800 tracking-tight">智慧逐字稿 (高準確校正版)</h2>
                 </div>
                 
                 <div id="transcript-list" class="space-y-6">
@@ -223,7 +223,7 @@
         // 變數與 API 設置
         // -------------------------
         
-        // 
+        // ⚠️ 您的舊金鑰已被 Google 安全封鎖，請填入「全新申請」的金鑰
         const apiKey = "AIzaSyAaRFGQt5r3xZhdCmY_gxgEyaRfcHpN9vc"; // <--- 1. 【請在這裡填入您的新 API KEY】 !!! (例如 "AIzaSy...")
         
         // 錄音相關變數
@@ -595,34 +595,39 @@
         }
 
         async function analyzeAudioWithAI(base64Audio, mimeType) {
-            processStatusText.textContent = '吳博精靈正在深度學習聲紋並整理重點... (需時幾十秒)';
+            processStatusText.textContent = '吳博精靈正在深度比對聲紋與精準校對文字... (需時幾十秒)';
             
-            let prompt = `你是一個專業的「會議記錄精靈」。請仔細聆聽這段會議或對話音檔，並完成以下任務：
+            let prompt = `你是一個頂級的「專業會議記錄員」與「語音分析專家」。請仔細聆聽這段會議音檔，並嚴格執行以下任務：
 
-【核心任務：人聲特徵綁定與講者標註】
-1. 請極度仔細地分辨不同人的聲紋、音色和語氣。`;
+【核心任務一：前後文語意校正與高精準聽寫】
+1. **上下文自動修正**：請「極度仔細」地聆聽音檔。轉換文字時，**絕對要根據前後文的邏輯與語意，自動修正同音異字、口誤或含糊不清的詞彙**。
+2. **在地化與流暢度**：將內容轉換為「繁體中文 (台灣)」的逐字稿。請適度去除過多的無意義語氣詞（如：呃、嗯、那個），讓語句通順、精確且符合專業會議水準。
 
-            // 動態判斷：只有在「即時錄音」且有生成草稿時，才給 AI 綁定名字的指令，避免上傳純音檔時 AI 產生困惑
+【核心任務二：高精準聲紋辨識 (Speaker Diarization)】
+1. **特徵拆解**：請仔細分辨不同人的音色（低沉/高亢、男聲/女聲）、說話節奏與口音。
+2. **疊話與附和處理**：即使遇到多人同時說話（疊話），或是極短的附和（如「對」、「好」、「沒錯」），都必須嚴格切分成獨立的發言段落，絕不能把兩人的聲音混在同一段文字裡。`;
+
+            // 動態判斷：只有在「即時錄音」且有生成草稿時，才給 AI 綁定名字的指令
             if (finalLiveText && finalLiveText.trim().length > 0) {
                 prompt += `
-2. 我們會提供一份「即時語音草稿」。在草稿中，有些句子前方可能帶有 \`[XXX]:\` 的標籤，這是使用者在錄音當下手動輸入的名字。
-3. **絕對關鍵指令**：請將帶有該標籤的「聲音特徵」與該「名字」進行綁定記憶。當該聲音在音檔其他未標註的地方再次出現時，請自動辨識並**直接套用該名字（例如：「王總」、「李經理」）**，不要再使用預設的「講者 A」。
-4. 遇到未被使用者標註過的新聲音，再以預設的「講者 A」、「講者 B」等代稱。`;
+3. 我們會提供一份「即時語音草稿」。請注意：這份草稿是由準確率普通的即時系統生成的，裡面含有大量錯字。**請務必以您實際聽到的「音檔內容」為絕對準則進行聽寫，切勿盲目照抄草稿**。
+4. 草稿的唯一用途是「聲紋綁定」。在草稿中，有些句子前方帶有 \`[XXX]:\` 的標籤，這是使用者手動輸入的名字。請將該標籤對應的「聲音特徵」與「名字」綁定。當該聲音在音檔中再次出現時，請自動辨識並**直接套用該名字（例如：「王總」、「李經理」）**。
+5. 遇到未被使用者標註過的新聲音，再以預設的「講者 A」、「講者 B」等代稱。`;
             } else {
                 prompt += `
-2. 請根據聲音特徵，自動將不同說話者分類為「講者 A」、「講者 B」、「講者 C」等。
-3. 如果只有一個人說話，請單純標示為「講者」。`;
+3. 請根據聲音特徵，自動將不同說話者分類為「講者 A」、「講者 B」、「講者 C」等。
+4. 如果只有一個人說話，請單純標示為「講者」。`;
             }
 
             prompt += `
 
 任務清單：
-1. 根據聲音特徵與指示，將對話內容打成逐字稿，並嚴格標示每句話的說話者。
+1. 產出高精準度、語意通順的繁體中文逐字稿，並嚴格標示每句話的說話者。
 2. 撰寫一段簡明扼要的「會議總結」。
 3. 條列出會議中提到的「待辦事項 (Action Items)」，若無則留空陣列。`;
 
             if (finalLiveText && finalLiveText.trim().length > 0) {
-                prompt += `\n\n【使用者即時標註草稿參考】\n"""\n${finalLiveText}\n"""\n請將這份草稿與實際音檔交叉比對，找出對應聲音並精準輸出。`;
+                prompt += `\n\n【使用者即時標註草稿參考 (警告：僅供講者標籤對應，內文可能有大量錯字，請以音檔為主)】\n"""\n${finalLiveText}\n"""`;
             }
 
             prompt += `\n\n請務必以嚴格的 JSON 格式回傳，格式定義如下：
@@ -630,7 +635,7 @@
   "summary": "這裡填寫整體的會議總結...",
   "actionItems": ["待辦事項1", "待辦事項2"],
   "transcript": [
-    { "speaker": "講者名稱", "text": "大家好，今天我們要討論..." },
+    { "speaker": "講者名稱", "text": "精準且語意通順的對話內容..." },
     { "speaker": "講者名稱", "text": "好的，我認為..." },
     { "speaker": "講者名稱", "text": "對，就照這樣做。" }
   ]
