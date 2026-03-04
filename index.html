@@ -43,6 +43,28 @@
 
     <main class="max-w-3xl mx-auto px-4 py-6 pb-24">
         
+        <!-- API 金鑰設定區塊 (新增：保護金鑰安全，避免 GitHub 外洩) -->
+        <div class="bg-amber-50/80 rounded-3xl p-4 sm:p-5 mb-6 border border-amber-200 shadow-sm">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                <div class="flex items-center gap-2 text-amber-800 font-bold whitespace-nowrap">
+                    <i data-lucide="key" class="w-5 h-5"></i>
+                    <label for="api-key-input">API 金鑰：</label>
+                </div>
+                <input 
+                    type="password" 
+                    id="api-key-input" 
+                    placeholder="請貼上您的 Gemini API Key (AIzaSy...)" 
+                    class="flex-1 w-full bg-white border border-amber-300 rounded-xl px-4 py-2 text-sm text-slate-800 focus:outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all font-mono"
+                >
+                <button id="btn-save-key" class="px-5 py-2 bg-amber-600 text-white text-sm font-bold rounded-xl hover:bg-amber-700 transition-colors shadow-sm active:scale-95 whitespace-nowrap w-full sm:w-auto flex justify-center items-center gap-1">
+                    儲存本機
+                </button>
+            </div>
+            <p class="text-xs text-amber-700 mt-2 sm:ml-24 leading-relaxed">
+                ⚠️ <span class="font-bold">安全提醒：</span>請勿將金鑰直接寫入原始碼中以防外洩。您在此處輸入的金鑰僅會安全地儲存於您目前的瀏覽器中，不會傳送至其他地方。
+            </p>
+        </div>
+
         <!-- 錯誤提示 -->
         <div id="error-box" class="hidden-view mb-6 p-4 bg-red-50 text-red-700 rounded-2xl flex items-start gap-3 border border-red-100 shadow-sm">
             <i data-lucide="alert-circle" class="shrink-0 mt-0.5 w-5 h-5"></i>
@@ -59,6 +81,22 @@
                 <button id="tab-upload" class="flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-colors text-slate-500 hover:bg-slate-50">
                     <i data-lucide="upload" class="w-4 h-4"></i> 上傳錄音檔
                 </button>
+            </div>
+
+            <!-- 輸出語言設定 -->
+            <div class="bg-slate-50/50 px-4 sm:px-8 py-3 border-b border-slate-100 flex items-center justify-between sm:justify-end gap-3">
+                <div class="flex items-center gap-2 text-slate-600 font-bold text-sm">
+                    <i data-lucide="languages" class="w-4 h-4"></i>
+                    <label for="language-select">輸出語言：</label>
+                </div>
+                <select id="language-select" class="bg-white border border-slate-200 text-slate-700 text-sm rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 block py-1.5 px-3 outline-none cursor-pointer font-medium shadow-sm transition-all">
+                    <option value="繁體中文 (台灣)">繁體中文</option>
+                    <option value="English">English</option>
+                    <option value="日本語">日本語</option>
+                    <option value="한국어">한국어</option>
+                    <option value="Français">法文 (Français)</option>
+                    <option value="Español">西班牙文 (Español)</option>
+                </select>
             </div>
 
             <div class="p-4 sm:p-8 flex flex-col items-center justify-center min-h-[350px]">
@@ -85,7 +123,7 @@
                     </div>
                     <p id="record-status-text" class="text-sm font-medium text-red-500 mb-6">正在錄音中...</p>
 
-                    <!-- === 智慧講者標註區 (全新升級) === -->
+                    <!-- === 智慧講者標註區 === -->
                     <div class="w-full mb-6 bg-indigo-50/60 p-4 rounded-2xl border border-indigo-100 flex flex-col gap-3">
                         <div class="flex flex-col sm:flex-row gap-3">
                             <div class="flex items-center gap-2 text-indigo-700 font-bold whitespace-nowrap">
@@ -223,8 +261,7 @@
         // 變數與 API 設置
         // -------------------------
         
-        // ⚠️ 您的舊金鑰已被 Google 安全封鎖，請填入「全新申請」的金鑰
-        const apiKey = "AIzaSyAaRFGQt5r3xZhdCmY_gxgEyaRfcHpN9vc"; // <--- 1. 【請在這裡填入您的新 API KEY】 !!! (例如 "AIzaSy...")
+        // 已經移除了寫死的 API 金鑰，改由畫面動態輸入
         
         // 錄音相關變數
         let isRecording = false;
@@ -238,8 +275,12 @@
         // 即時語音辨識與講者標籤
         let recognition = null;
         let finalLiveText = '';
-        let activeSpeaker = ''; // 目前鎖定的發言者
-        let speakerHistory = new Set(); // 歷史發言者紀錄
+        let activeSpeaker = ''; 
+        let speakerHistory = new Set(); 
+
+        // DOM 元素 - API Key
+        const apiKeyInput = document.getElementById('api-key-input');
+        const btnSaveKey = document.getElementById('btn-save-key');
 
         // DOM 元素 - 版面
         const tabRecord = document.getElementById('tab-record');
@@ -280,25 +321,45 @@
         const btnReset = document.getElementById('btn-reset');
 
         // -------------------------
-        // 講者標註邏輯 (一鍵清空 + 歷史 Chips)
+        // API Key 儲存邏輯
+        // -------------------------
+        const savedKey = localStorage.getItem('gemini_api_key');
+        if (savedKey) {
+            apiKeyInput.value = savedKey;
+        }
+
+        btnSaveKey.addEventListener('click', () => {
+            const key = apiKeyInput.value.trim();
+            if (key) {
+                localStorage.setItem('gemini_api_key', key);
+                btnSaveKey.innerHTML = '<i data-lucide="check" class="w-4 h-4 inline"></i> 已儲存';
+                lucide.createIcons();
+                setTimeout(() => {
+                    btnSaveKey.innerHTML = '儲存本機';
+                }, 2000);
+            } else {
+                localStorage.removeItem('gemini_api_key');
+                alert('API 金鑰已清除。');
+            }
+        });
+
+        // -------------------------
+        // 講者標註邏輯
         // -------------------------
         function updateActiveSpeaker(name) {
             activeSpeaker = name.trim();
             speakerInput.value = activeSpeaker;
             
             if (activeSpeaker) {
-                // 如果有輸入名稱
                 btnClearSpeaker.classList.remove('hidden-view');
                 speakerHistory.add(activeSpeaker);
             } else {
-                // 如果清空
                 btnClearSpeaker.classList.add('hidden-view');
             }
             renderSpeakerChips();
         }
 
         function renderSpeakerChips() {
-            // 先清除舊的按鈕
             const oldChips = speakerChipsContainer.querySelectorAll('.speaker-chip');
             oldChips.forEach(chip => chip.remove());
 
@@ -306,35 +367,32 @@
                 noSpeakerHint.classList.add('hidden-view');
             }
 
-            // 重新渲染歷史清單
             speakerHistory.forEach(name => {
                 const btn = document.createElement('button');
                 const isActive = (name === activeSpeaker);
                 
-                // 動態決定按鈕樣式 (選中 / 未選中)
                 btn.className = `speaker-chip px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm transition-all focus:outline-none ${
                     isActive 
                     ? 'bg-indigo-600 text-white scale-105 shadow-indigo-200' 
                     : 'bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 active:scale-95'
                 }`;
                 btn.textContent = name;
-                btn.onclick = () => updateActiveSpeaker(name); // 點擊直接切換
+                btn.onclick = () => updateActiveSpeaker(name); 
                 speakerChipsContainer.appendChild(btn);
             });
         }
 
-        // 綁定標註事件
         btnAddSpeaker.onclick = () => updateActiveSpeaker(speakerInput.value);
         speakerInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') updateActiveSpeaker(speakerInput.value);
         });
         btnClearSpeaker.onclick = () => {
             updateActiveSpeaker('');
-            speakerInput.focus(); // 清空後自動聚焦方便下次打字
+            speakerInput.focus(); 
         };
 
         // -------------------------
-        // 初始化即時語音辨識 (瀏覽器內建)
+        // 初始化即時語音辨識
         // -------------------------
         function initSpeechRecognition() {
             if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -350,7 +408,6 @@
                     let interimTranscript = '';
                     for (let i = event.resultIndex; i < event.results.length; ++i) {
                         if (event.results[i].isFinal) {
-                            // 擷取目前鎖定的講者
                             const speakerTag = activeSpeaker ? `[${activeSpeaker}]: ` : '';
                             finalLiveText += speakerTag + event.results[i][0].transcript + '\n';
                         } else {
@@ -359,11 +416,9 @@
                     }
                     liveFinalText.textContent = finalLiveText;
                     
-                    // 動態文字加上名字前綴 (視覺體驗更好)
                     const tempTag = activeSpeaker ? `[${activeSpeaker}]: ` : '';
                     liveInterimText.textContent = interimTranscript ? tempTag + interimTranscript : '';
                     
-                    // 自動滾動到底部
                     const liveBox = liveFinalText.parentElement;
                     liveBox.scrollTop = liveBox.scrollHeight;
                 };
@@ -457,7 +512,6 @@
                 mediaRecorder = new MediaRecorder(audioStream);
                 audioChunks = [];
                 
-                // 重置狀態
                 finalLiveText = ''; 
                 liveFinalText.textContent = '';
                 liveInterimText.textContent = '';
@@ -541,7 +595,6 @@
             const file = event.target.files[0];
             if (!file) return;
 
-            // 放寬檔案類型檢查，避免擋住 iOS 的 m4a 語音備忘錄
             const validExtensions = ['.m4a', '.mp3', '.wav', '.ogg', '.aac', '.flac', '.webm', '.mp4'];
             const fileName = file.name ? file.name.toLowerCase() : '';
             const hasValidExtension = validExtensions.some(ext => fileName.endsWith(ext));
@@ -552,7 +605,6 @@
                 return;
             }
 
-            // 放寬至 20MB
             const maxSizeMB = 20;
             if (file.size > maxSizeMB * 1024 * 1024) {
                 showError(`檔案過大。受限於 API 架構限制，請上傳小於 ${maxSizeMB}MB 的音檔。`);
@@ -564,6 +616,13 @@
         }
 
         function handleAudioProcessing(audioBlobOrFile) {
+            // 確認是否有填寫 API Key
+            const apiKey = apiKeyInput.value.trim();
+            if (!apiKey) {
+                showError('⚠️ 請先在上方設定區塊填入並儲存您的 Gemini API 金鑰！');
+                return;
+            }
+
             showProcessView('正在讀取音檔...');
             
             const reader = new FileReader();
@@ -572,7 +631,6 @@
                 const base64data = reader.result.split(',')[1];
                 let mimeType = audioBlobOrFile.type;
                 
-                // 修正 iOS m4a 或空白 MIME type 的問題，確保 API 接受
                 if (mimeType === 'audio/x-m4a') mimeType = 'audio/mp4';
                 if (mimeType === 'audio/x-wav') mimeType = 'audio/wav';
                 
@@ -582,11 +640,11 @@
                     } else if (audioBlobOrFile.name && audioBlobOrFile.name.toLowerCase().endsWith('.wav')) {
                         mimeType = 'audio/wav';
                     } else {
-                        mimeType = 'audio/mp3'; // 預設安全 fallback
+                        mimeType = 'audio/mp3'; 
                     }
                 }
                 
-                await analyzeAudioWithAI(base64data, mimeType);
+                await analyzeAudioWithAI(base64data, mimeType, apiKey);
             };
             reader.onerror = () => {
                 resetApp(true);
@@ -594,23 +652,23 @@
             };
         }
 
-        async function analyzeAudioWithAI(base64Audio, mimeType) {
-            processStatusText.textContent = '吳博精靈正在深度比對聲紋與精準校對文字... (需時幾十秒)';
+        async function analyzeAudioWithAI(base64Audio, mimeType, apiKey) {
+            const targetLang = document.getElementById('language-select').value;
+            processStatusText.textContent = `吳博精靈正在深度比對聲紋與翻譯校對文字（目標語言：${targetLang}）...`;
             
-            let prompt = `你是一個頂級的「專業會議記錄員」與「語音分析專家」。請仔細聆聽這段會議音檔，並嚴格執行以下任務：
+            let prompt = `你是一個頂級的「專業會議記錄員」與「語音分析及翻譯專家」。請仔細聆聽這段會議音檔，並嚴格執行以下任務：
 
-【核心任務一：前後文語意校正與高精準聽寫】
-1. **上下文自動修正**：請「極度仔細」地聆聽音檔。轉換文字時，**絕對要根據前後文的邏輯與語意，自動修正同音異字、口誤或含糊不清的詞彙**。
-2. **在地化與流暢度**：將內容轉換為「繁體中文 (台灣)」的逐字稿。請適度去除過多的無意義語氣詞（如：呃、嗯、那個），讓語句通順、精確且符合專業會議水準。
+【核心任務一：前後文語意校正與高精準聽寫/翻譯】
+1. **上下文自動修正**：請「極度仔細」地聆聽音檔。轉換文字時，絕對要根據前後文的邏輯與語意，自動修正同音異字、口誤或含糊不清的詞彙。
+2. **目標語言與翻譯流暢度**：請將所有產出的內容（逐字稿、總結、待辦事項），統一轉換/翻譯為「${targetLang}」。如果音檔原始語言與目標語言不同，請直接輸出高品質的翻譯結果。請適度去除過多的無意義語氣詞（如：呃、嗯、那個），讓語句通順、精確且符合專業會議水準。
 
 【核心任務二：高精準聲紋辨識 (Speaker Diarization)】
 1. **特徵拆解**：請仔細分辨不同人的音色（低沉/高亢、男聲/女聲）、說話節奏與口音。
 2. **疊話與附和處理**：即使遇到多人同時說話（疊話），或是極短的附和（如「對」、「好」、「沒錯」），都必須嚴格切分成獨立的發言段落，絕不能把兩人的聲音混在同一段文字裡。`;
 
-            // 動態判斷：只有在「即時錄音」且有生成草稿時，才給 AI 綁定名字的指令
             if (finalLiveText && finalLiveText.trim().length > 0) {
                 prompt += `
-3. 我們會提供一份「即時語音草稿」。請注意：這份草稿是由準確率普通的即時系統生成的，裡面含有大量錯字。**請務必以您實際聽到的「音檔內容」為絕對準則進行聽寫，切勿盲目照抄草稿**。
+3. 我們會提供一份「即時語音草稿」。請注意：這份草稿是由準確率普通的即時系統生成的，裡面含有大量錯字且尚未翻譯。**請務必以您實際聽到的「音檔內容」為絕對準則進行聽寫與翻譯，切勿盲目照抄草稿**。
 4. 草稿的唯一用途是「聲紋綁定」。在草稿中，有些句子前方帶有 \`[XXX]:\` 的標籤，這是使用者手動輸入的名字。請將該標籤對應的「聲音特徵」與「名字」綁定。當該聲音在音檔中再次出現時，請自動辨識並**直接套用該名字（例如：「王總」、「李經理」）**。
 5. 遇到未被使用者標註過的新聲音，再以預設的「講者 A」、「講者 B」等代稱。`;
             } else {
@@ -622,12 +680,12 @@
             prompt += `
 
 任務清單：
-1. 產出高精準度、語意通順的繁體中文逐字稿，並嚴格標示每句話的說話者。
-2. 撰寫一段簡明扼要的「會議總結」。
-3. 條列出會議中提到的「待辦事項 (Action Items)」，若無則留空陣列。`;
+1. 產出高精準度、語意通順的「${targetLang}」逐字稿，並嚴格標示每句話的說話者。
+2. 撰寫一段簡明扼要的「${targetLang}」會議總結。
+3. **深度萃取待辦事項**：仔細從對話中找出後續需要執行的任務、負責人或下一步計畫，條列成「${targetLang}」的「待辦事項 (Action Items)」。即使講者沒有明確說「待辦事項」，也請從對話與結論中主動推導出下一步。若真的完全沒有任何後續任務，再留空陣列。`;
 
             if (finalLiveText && finalLiveText.trim().length > 0) {
-                prompt += `\n\n【使用者即時標註草稿參考 (警告：僅供講者標籤對應，內文可能有大量錯字，請以音檔為主)】\n"""\n${finalLiveText}\n"""`;
+                prompt += `\n\n【使用者即時標註草稿參考 (警告：僅供講者標籤對應，內文可能有大量錯字且未翻譯，請以音檔為主)】\n"""\n${finalLiveText}\n"""`;
             }
 
             prompt += `\n\n請務必以嚴格的 JSON 格式回傳，格式定義如下：
@@ -675,6 +733,10 @@
                         if (response.status === 404 || response.status === 403) {
                             targetModel = "gemini-2.5-flash"; 
                         }
+                        // 若 API Key 錯誤，提示使用者檢查
+                        if (response.status === 400 && errMsg.includes("API key")) {
+                            throw new Error('API 金鑰無效或已過期，請重新設定。');
+                        }
                         throw new Error(`API 錯誤 (${response.status}): ${errMsg}`);
                     }
 
@@ -699,13 +761,9 @@
 
                 } catch (err) {
                     attempt++;
-                    if (attempt > maxRetries) {
-                        resetApp(true); // 保留錯誤訊息，不讓它被瞬間清空
-                        if (!apiKey || apiKey === "") {
-                            showError('⚠️ 缺少 API Key！請打開網頁原始碼，在「const apiKey = "";」中填入您的金鑰。');
-                        } else {
-                            showError(`AI 處理失敗，請稍後再試。(${err.message})`);
-                        }
+                    if (attempt > maxRetries || err.message.includes('API 金鑰')) {
+                        resetApp(true); 
+                        showError(`處理失敗：${err.message}`);
                         return;
                     }
                     await new Promise(resolve => setTimeout(resolve, delays[attempt - 1]));
@@ -726,8 +784,10 @@
 
             const actionContainer = document.getElementById('action-items-container');
             const actionList = document.getElementById('action-items-list');
+            
+            actionContainer.classList.remove('hidden-view'); 
+            
             if (data.actionItems && data.actionItems.length > 0) {
-                actionContainer.classList.remove('hidden-view');
                 actionList.innerHTML = data.actionItems.map((item, idx) => `
                     <li class="flex items-start gap-3 bg-amber-50/50 p-4 rounded-2xl border border-amber-100/50">
                         <div class="w-7 h-7 rounded-full bg-amber-200 text-amber-700 flex items-center justify-center text-sm font-extrabold shrink-0 mt-0.5 shadow-sm">
@@ -737,7 +797,11 @@
                     </li>
                 `).join('');
             } else {
-                actionContainer.classList.add('hidden-view');
+                actionList.innerHTML = `
+                    <li class="flex items-start gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                        <span class="text-slate-500 leading-relaxed italic">本次會議無特別提及的明確待辦事項。</span>
+                    </li>
+                `;
             }
 
             const transcriptList = document.getElementById('transcript-list');
